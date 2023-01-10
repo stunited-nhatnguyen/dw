@@ -13,6 +13,8 @@ DW_PATH='datawarehouse'
 
 spark = SparkSession.builder.appName('Example1').getOrCreate()
 spark._jsc.hadoopConfiguration().set("fs.s3a.aws.credentials.provider", "com.amazonaws.auth.profile.ProfileCredentialsProvider")
+spark.conf.set("spark.debug.maxToStringFields", 10000)
+
 s3_client = boto3.client('s3')
 s3_resource = boto3.resource('s3')
 
@@ -28,19 +30,6 @@ TABLES = [
     "category_name"
 ]
 
-def get_tables():
-    try:
-        dw = s3_resource.Bucket(BUCKET).objects.filter(Prefix="raw/")
-        tables = set()
-        for e in dw:
-            arr = e.key.split("/")
-            if(arr[1] != ''):
-                tables.add(arr[1])
-        if len(tables) > 0:
-            return tables
-        return TABLES
-    except Exception as e:
-        return TABLES
 
 def execute(time):
     try:
@@ -48,16 +37,19 @@ def execute(time):
         year = arrTime[0]
         month = arrTime[1]
         day = arrTime[2]
-        for table in get_tables():
-            df = spark.read.format('csv').options(header='true', inferSchema='true').load(f"s3a://{BUCKET}/{RAW_PATH}/{table}/{year}/{month}/10/")
-            df.coalesce(1).write.mode("append").option("compression", "snappy").parquet(f"s3a://{BUCKET}/{TRUST_PATH}/{table}/{year}/{month}/{day}/")
-        print('Process success!')
+
+        df = spark.read.format('parquet').options(header='true', inferSchema='true').option("recursiveFileLookup", "true").load(f"s3a://{BUCKET}/{DW_PATH}/").createOrReplaceTempView('dwh')
+        query = spark.sql('select * from dwh')
+        print(query.count())
     except Exception as e:
         print(e)
 
+
 if __name__ == '__main__':
     app_parser = argparse.ArgumentParser(allow_abbrev=False)
+
     app_parser.add_argument('time',
+                            action='store',
                             type=str,
                             help='Time format YYYY-mm-dd')
 
