@@ -72,10 +72,16 @@ def from_hdfs(time):
         for table in get_tables():
             df = spark.read.format('csv').options(header='true', inferSchema='true').load(
                 f"data/{table}/{year}/{month}/{day}/")
+            my_schema = df.schema()
+            columns = []
+            for field in my_schema.fields():
+                columns.append(field.name()+" "+field.dataType().typeName())
+            columns_string = ",".join(columns)
+            print(columns_string + "\n")
             outputDf = df.withColumn("year", lit(year)).withColumn(
                 "month", lit(month)).withColumn("day", lit(day))
-            outputDf.write.mode("append").partitionBy("year", "month", "day").parquet(
-                f"hdfs://namenode:9000/datalake/{table}")
+            outputDf.write.mode("overite").partitionBy("year", "month", "day").parquet(
+                f"hdfs://namenode:9000/user/hive/warehouse/revenue/{table}")
         print('Process success!')
     except Exception as e:
         print(e)
